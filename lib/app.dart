@@ -1369,11 +1369,12 @@ class _GameShellState extends ConsumerState<GameShell>
         ],
       ),
     );
-    if (skip == true)
+    if (skip == true) {
       await perform(q.id, 'skip_quest', {
         'id': q.id,
         'reason': reason.text,
       }, 'Quest skipped. Your next chapter can adjust.');
+    }
     reason.dispose();
   }
 
@@ -1474,10 +1475,11 @@ class _GameShellState extends ConsumerState<GameShell>
         ],
       ),
     );
-    if (save == true)
+    if (save == true) {
       await perform('notes', 'review_notes', {
         'notes': notes.text,
       }, 'Reflection saved.');
+    }
     notes.dispose();
   }
 }
@@ -1804,8 +1806,9 @@ class _QuestFormState extends State<QuestForm> {
                     lastDate: DateTime.parse(widget.today)
                         .add(const Duration(days: 365)),
                   );
-                  if (day != null)
+                  if (day != null) {
                     setState(() => due = DateFormat('yyyy-MM-dd').format(day));
+                  }
                 },
                 icon: const Icon(Icons.event_outlined, size: 18),
                 label: Text('Due $due'),

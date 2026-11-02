@@ -76,8 +76,9 @@ class GameController extends AsyncNotifier<GameSnapshot> {
 String friendlyError(Object error) {
   if (error is PostgrestException) return error.message;
   if (error is AuthException) return error.message;
-  if (error is FormatException)
+  if (error is FormatException) {
     return 'That is not valid quest JSON. Check the format and try again.';
+  }
   if (error is StateError) return error.message.toString();
   return 'Could not reach your adventure. Check your connection and try again.';
 }

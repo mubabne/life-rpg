@@ -703,33 +703,36 @@ class _GameShellState extends ConsumerState<GameShell>
         ),
         const SizedBox(height: 28),
         LayoutBuilder(
-          builder: (context, constraints) => Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              MetricTile(
-                width: (constraints.maxWidth - 24) / 3,
-                label: 'QUESTS FINISHED',
-                value: '$completed',
-                icon: Icons.check_circle_outline,
-                color: green,
-              ),
-              MetricTile(
-                width: (constraints.maxWidth - 24) / 3,
-                label: 'TOTAL XP',
-                value: '${game.xp}',
-                icon: Icons.bolt_rounded,
-                color: const Color(0xFF9473B8),
-              ),
-              MetricTile(
-                width: (constraints.maxWidth - 24) / 3,
-                label: 'GOLD EARNED',
-                value: '${game.gold}',
-                icon: Icons.toll_rounded,
-                color: const Color(0xFFB18A3D),
-              ),
-            ],
-          ),
+          builder: (context, constraints) {
+            if (constraints.maxWidth < 24) return const SizedBox.shrink();
+            return Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                MetricTile(
+                  width: (constraints.maxWidth - 24) / 3,
+                  label: 'QUESTS FINISHED',
+                  value: '$completed',
+                  icon: Icons.check_circle_outline,
+                  color: green,
+                ),
+                MetricTile(
+                  width: (constraints.maxWidth - 24) / 3,
+                  label: 'TOTAL XP',
+                  value: '${game.xp}',
+                  icon: Icons.bolt_rounded,
+                  color: const Color(0xFF9473B8),
+                ),
+                MetricTile(
+                  width: (constraints.maxWidth - 24) / 3,
+                  label: 'GOLD EARNED',
+                  value: '${game.gold}',
+                  icon: Icons.toll_rounded,
+                  color: const Color(0xFFB18A3D),
+                ),
+              ],
+            );
+          },
         ),
         const SizedBox(height: 34),
         Row(

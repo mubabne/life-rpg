@@ -49,6 +49,10 @@ dev_dependencies:
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
 
+dependency_overrides:
+  # 2.6.x adds native hooks that Windows Application Control blocks.
+  shared_preferences_foundation: 2.5.7
+
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
 

@@ -1,0 +1,7 @@
+{
+  "name": "life-rpg-backend-tests",
+  "private": true,
+  "type": "module",
+  "scripts": { "test": "node --test test/backend.test.mjs test/contract.test.mjs" },
+  "devDependencies": { "@electric-sql/pglite": "0.5.14" }
+}

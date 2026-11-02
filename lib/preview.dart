@@ -1,0 +1,152 @@
+// Static, read-only sample data. No progression rules run in the client.
+Map<String, dynamic> previewData() {
+  final today = DateTime.now()
+      .toUtc()
+      .add(const Duration(hours: 8))
+      .toIso8601String()
+      .substring(0, 10);
+  return {
+    'today': today,
+    'profile': {
+      'display_name': 'Adventurer',
+      'timezone': 'Asia/Ulaanbaatar',
+      'weekly_capacity': 120,
+    },
+    'progress': {
+      'total_xp': 620,
+      'level': 3,
+      'gold': 145,
+      'level_fraction': 0.46,
+      'xp_into_level': 237,
+      'xp_to_next': 520,
+    },
+    'stats': {
+      'health': 180,
+      'mind': 230,
+      'craft': 120,
+      'social': 50,
+      'wealth': 40,
+    },
+    'quests': [
+      {
+        'id': 'walk',
+        'title': 'Take the scenic route',
+        'description': 'Step outside for a 20-minute walk. Leave your headphones behind for the first five minutes.',
+        'stat_tag': 'health',
+        'cadence': 'daily',
+        'status': 'pending',
+        'source': 'ai',
+        'due_local_date': today,
+        'xp_reward': 20,
+        'gold_reward': 5,
+        'estimated_minutes': 20,
+      },
+      {
+        'id': 'learn',
+        'title': 'A little wiser than yesterday',
+        'description': 'Read ten pages of a book and write down one idea you want to remember.',
+        'stat_tag': 'mind',
+        'cadence': 'daily',
+        'status': 'pending',
+        'source': 'ai',
+        'due_local_date': today,
+        'xp_reward': 20,
+        'gold_reward': 5,
+        'estimated_minutes': 15,
+      },
+      {
+        'id': 'craft',
+        'title': 'Make something that matters',
+        'description': 'Spend a focused session moving your personal project forward. Pick one small, finishable piece.',
+        'stat_tag': 'craft',
+        'cadence': 'weekly',
+        'status': 'pending',
+        'source': 'manual',
+        'due_local_date': today,
+        'xp_reward': 40,
+        'gold_reward': 10,
+        'estimated_minutes': 30,
+      },
+      {
+        'id': 'social',
+        'title': 'Send a little good energy',
+        'description':
+            'Check in with someone you have not spoken to in a while.',
+        'stat_tag': 'social',
+        'cadence': 'daily',
+        'status': 'completed',
+        'source': 'ai',
+        'due_local_date': today,
+        'xp_reward': 20,
+        'gold_reward': 5,
+        'estimated_minutes': 5,
+      },
+      {
+        'id': 'wealth',
+        'title': 'Give your gold a purpose',
+        'description':
+            'Review this month’s spending and choose one small saving goal.',
+        'stat_tag': 'wealth',
+        'cadence': 'monthly',
+        'status': 'pending',
+        'source': 'ai',
+        'due_local_date': today,
+        'xp_reward': 40,
+        'gold_reward': 10,
+        'estimated_minutes': 25,
+      },
+    ],
+    'habits': [
+      {
+        'id': 'water',
+        'title': 'Start with a glass of water',
+        'stat_tag': 'health',
+        'strength': 0.78,
+        'streak': 8,
+        'completed_today': true,
+        'freezes_left': 2,
+        'week': [
+          'completed',
+          'completed',
+          'frozen',
+          'completed',
+          'completed',
+          'completed',
+          'completed',
+        ],
+      },
+      {
+        'id': 'journal',
+        'title': 'Five minutes of reflection',
+        'stat_tag': 'mind',
+        'strength': 0.52,
+        'streak': 3,
+        'completed_today': false,
+        'freezes_left': 1,
+        'week': [
+          'completed',
+          'missed',
+          'frozen',
+          'completed',
+          'completed',
+          'completed',
+          'pending',
+        ],
+      },
+    ],
+    'templates': [],
+    'review': {
+      'week_start': today,
+      'completed': 8,
+      'skipped': 2,
+      'overdue': 1,
+      'total': 11,
+      'completion_rate': 0.73,
+      'next_capacity': 120,
+      'message':
+          'Keep a steady pace. Small steps still move the story forward.',
+      'export_text':
+          'Sample weekly review — sign in to start tracking your own progress.',
+    },
+  };
+}

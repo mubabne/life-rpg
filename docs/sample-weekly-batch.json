@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "period_type": "weekly",
+  "period_start": "2026-11-02",
+  "timezone": "Asia/Ulaanbaatar",
+  "quests": [
+    {"item_key":"walk-monday","title":"Take the scenic route","description":"Take a 20-minute walk outside.","stat_tag":"health","cadence":"daily","difficulty":1,"estimated_minutes":20,"due_local_date":"2026-11-02"},
+    {"item_key":"read-tuesday","title":"A little wiser","description":"Read ten pages and note one idea.","stat_tag":"mind","cadence":"daily","difficulty":1,"estimated_minutes":15,"due_local_date":"2026-11-03"},
+    {"item_key":"craft-week","title":"Make something that matters","description":"Finish one small piece of your project.","stat_tag":"craft","cadence":"weekly","difficulty":2,"estimated_minutes":30,"due_local_date":"2026-11-06"},
+    {"item_key":"check-in","title":"Send a little good energy","description":"Check in with a friend.","stat_tag":"social","cadence":"weekly","difficulty":1,"estimated_minutes":10,"due_local_date":"2026-11-07"},
+    {"item_key":"money-check","title":"Give your gold a purpose","description":"Review this week’s spending.","stat_tag":"wealth","cadence":"weekly","difficulty":1,"estimated_minutes":15,"due_local_date":"2026-11-08"}
+  ]
+}

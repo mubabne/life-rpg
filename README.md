@@ -14,6 +14,14 @@ A personal productivity RPG built with Flutter, Riverpod, and Supabase. Turn rec
 - RLS from day one, server-side ownership checks, and explicit function permissions.
 - Phone bottom navigation and a responsive desktop/browser layout.
 
+## Go live
+
+Follow [docs/SETUP.md](docs/SETUP.md) to connect Supabase, OpenAI and Vercel.
+
+## AI quests
+
+Tap ✨ in the top bar. **Generate quests** asks GPT (server-side, via the `generate-quests` Edge Function and your `OPENAI_API_KEY`) to plan a balanced week from your review, habits and pending quests, within your weekly budget. **Copy prompt for ChatGPT** gives a ready prompt for your ChatGPT subscription; paste the JSON answer back to import it.
+
 ## Run
 
 Install Flutter compatible with Dart 3.13.7 (this project was verified with Flutter 3.47.9). Then:
@@ -73,7 +81,7 @@ Weekly reviews use a saved cutoff, preserve skips and unfinished work, and sugge
 - [Gmail setup](docs/gmail-setup.md)
 - [Apps Script source](integrations/gmail/Code.gs)
 
-ChatGPT notification emails are not assumed to contain a full payload. The paste importer is always available. Arbitrary prose email extraction, direct LLM API generation, and automatic review feedback are outside this first version.
+ChatGPT notification emails are not assumed to contain a full payload. The paste importer is always available. Plain-English emails labelled for import are turned into quests by GPT on the server.
 
 ## Verify
 

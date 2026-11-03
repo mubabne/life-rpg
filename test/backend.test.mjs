@@ -14,7 +14,8 @@ before(async()=>{
     create function auth.jwt() returns jsonb language sql stable as $$select jsonb_build_object('role',current_setting('request.jwt.claim.role',true))$$;
     grant usage on schema auth to authenticated,anon,service_role;
     grant execute on all functions in schema auth to authenticated,anon,service_role;`);
-  await db.exec(readFileSync(new URL('../supabase/migrations/20261102103605_life_rpg_core.sql',import.meta.url),'utf8'));
+  for (const file of ['20261102103605_life_rpg_core.sql','20261103090000_ai_quests.sql'])
+    await db.exec(readFileSync(new URL(`../supabase/migrations/${file}`,import.meta.url),'utf8'));
   await db.query('insert into auth.users values ($1),($2)',[alice,bob]);
 });
 after(()=>db.close());
@@ -75,10 +76,14 @@ function batch(extra={}){
 test('batch replays deduplicate across transports and failures roll back',async()=>{
   const b=batch();const first=await act('import_batch',{batch:b});const again=await act('import_batch',{batch:b});
   assert.equal(first.run_id,again.run_id);assert.equal(again.duplicate,true);
-  await assert.rejects(act('import_batch',{batch:{...b,quests:[{...b.quests[0],title:'Different'}]}}),/different batch/);
   await assert.rejects(act('import_batch',{batch:{...b,quests:[{...b.quests[0],xp_reward:9000}]}}),/fields/);
   await assert.rejects(act('import_batch',{batch:{...b,quests:[b.quests[0],b.quests[0]]}}),/unique/);
   assert.equal((await db.query('select count(*)::int n from public.generation_runs where user_id=$1',[alice])).rows[0].n,1);
+  // A second, different batch for the same week is added on top (still budget-capped).
+  const second=await act('import_batch',{batch:{...b,quests:[{...b.quests[0],title:'Different'}]}});
+  assert.notEqual(second.run_id,first.run_id);assert.equal(second.duplicate,false);
+  assert.equal((await db.query('select count(*)::int n from public.generation_runs where user_id=$1',[alice])).rows[0].n,2);
+  await assert.rejects(act('import_batch',{batch:{...b,quests:[{...b.quests[0],item_key:'too-much',estimated_minutes:480}]}}),/workload cap/);
 });
 test('all batch properties must be non-null and valid JSON types',async()=>{
   for (const key of ['schema_version','period_type','period_start','timezone','quests']) {
@@ -115,5 +120,22 @@ test('server ingestion requires service role and acknowledges duplicate messages
     const a=(await db.query('select public.life_rpg_ingest($1,$2,$3,$4::jsonb) result',[alice,'mail','msg',JSON.stringify(batch())])).rows[0].result;
     const b=(await db.query('select public.life_rpg_ingest($1,$2,$3,$4::jsonb) result',[alice,'mail','msg',JSON.stringify(batch())])).rows[0].result;
     assert.equal(a.run_id,b.run_id);assert.equal(b.duplicate,true);
+  } finally {await db.exec('reset role');}
+});
+
+test('AI imports are user-only and recorded as app/openai; owner snapshots are server-only',async()=>{
+  const b=batch({quests:[quest({item_key:'ai-walk',title:'AI walk',stat_tag:'health',difficulty:1,estimated_minutes:10})]});
+  const r=await asUser(bob,async()=>(await db.query('select public.life_rpg_import_ai($1::jsonb) result',[JSON.stringify(b)])).rows[0].result);
+  assert.equal(r.duplicate,false);
+  const run=(await db.query('select generator from public.generation_runs where id=$1',[r.run_id])).rows[0];
+  assert.equal(run.generator,'openai');
+  const q=(await db.query('select source,transport from public.quests where generation_run_id=$1',[r.run_id])).rows[0];
+  assert.deepEqual(q,{source:'ai',transport:'app'});
+  await asUser(bob,async()=>{await assert.rejects(db.query('select public.life_rpg_owner_snapshot($1)',[alice]),/permission denied/);});
+  await db.exec("select set_config('request.jwt.claim.role','service_role',false); set role service_role");
+  try {
+    const snap=(await db.query('select public.life_rpg_owner_snapshot($1) result',[bob])).rows[0].result;
+    assert.ok(snap.quests.some(x=>x.title==='AI walk'));assert.equal(snap.profile.timezone,'Asia/Ulaanbaatar');
+    await assert.rejects(db.query('select public.life_rpg_import_ai($1::jsonb)',[JSON.stringify(b)]),/permission denied/);
   } finally {await db.exec('reset role');}
 });

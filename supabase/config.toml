@@ -5,6 +5,10 @@
 project_id = "life-rpg"
 
 [functions.ingest-quests]
+# Protected by its own X-Life-RPG-Secret header, so Apps Script needs no Supabase JWT.
+verify_jwt = false
+
+[functions.generate-quests]
 verify_jwt = true
 
 [api]

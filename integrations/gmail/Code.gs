@@ -1,8 +1,9 @@
 /**
- * Set Script Properties: LIFE_RPG_ENDPOINT, LIFE_RPG_SECRET, LIFE_RPG_MAILBOX,
- * LIFE_RPG_GATEWAY_TOKEN (the public legacy anon JWT; not a service-role key).
+ * Set Script Properties: LIFE_RPG_ENDPOINT, LIFE_RPG_SECRET, LIFE_RPG_MAILBOX.
  * Authorize once in Apps Script; no Gmail OAuth is needed in Flutter.
- * Label only intended quest messages with LifeRPG/Quests.
+ * Label messages with LifeRPG/Quests. Emails containing quest JSON are imported
+ * as-is; any other email is sent to the server, where GPT turns its actionable
+ * items into quests (requires OPENAI_API_KEY in Supabase Edge Function secrets).
  */
 function ingestLifeRpgQuests() {
   var lock = LockService.getScriptLock();
@@ -12,8 +13,7 @@ function ingestLifeRpgQuests() {
     var endpoint = props.getProperty('LIFE_RPG_ENDPOINT');
     var secret = props.getProperty('LIFE_RPG_SECRET');
     var mailbox = props.getProperty('LIFE_RPG_MAILBOX');
-    var gatewayToken = props.getProperty('LIFE_RPG_GATEWAY_TOKEN');
-    if (!endpoint || !secret || !mailbox || !gatewayToken) throw new Error('Set the four Life RPG Script Properties first.');
+    if (!endpoint || !secret || !mailbox) throw new Error('Set the three Life RPG Script Properties first.');
     var seen = JSON.parse(props.getProperty('LIFE_RPG_RECEIPTS') || '{}');
     var now = Date.now();
     Object.keys(seen).forEach(function(id) { if (now - seen[id] > 90 * 86400000) delete seen[id]; });
@@ -25,10 +25,13 @@ function ingestLifeRpgQuests() {
         if (seen[id] || now - message.getDate().getTime() > 90 * 86400000) return;
         try {
           var batch = extractLifeRpgBatch(message.getPlainBody());
+          var envelope = {mailbox: mailbox, message_id: id};
+          if (batch) envelope.batch = batch;
+          else envelope.email = {subject: message.getSubject() || '', body: message.getPlainBody().slice(0, 12000)};
           var response = UrlFetchApp.fetch(endpoint, {
             method: 'post', contentType: 'application/json',
-            headers: {'X-Life-RPG-Secret': secret, 'Authorization': 'Bearer ' + gatewayToken},
-            payload: JSON.stringify({mailbox: mailbox, message_id: id, batch: batch}),
+            headers: {'X-Life-RPG-Secret': secret},
+            payload: JSON.stringify(envelope),
             muteHttpExceptions: true
           });
           var receipt;
@@ -47,11 +50,12 @@ function ingestLifeRpgQuests() {
   } finally { lock.releaseLock(); }
 }
 
+// Returns the quest JSON in the email, or null so the server can read it with GPT.
 function extractLifeRpgBatch(body) {
   var match = body.match(/LIFE_RPG_JSON_BEGIN\s*([\s\S]*?)\s*LIFE_RPG_JSON_END/);
   var text = match ? match[1] : body.trim().replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
-  try { return JSON.parse(text); }
-  catch (_) { throw new Error('No complete quest JSON in this email. Use the app’s paste import.'); }
+  try { var parsed = JSON.parse(text); return parsed && parsed.schema_version ? parsed : null; }
+  catch (_) { return null; }
 }
 
 function installLifeRpgTrigger() {

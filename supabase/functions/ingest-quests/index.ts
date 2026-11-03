@@ -1,4 +1,5 @@
 import {ContractError, validateBatch} from '../_shared/quest-contract.mjs';
+import {planQuests} from '../_shared/ai-planner.mjs';
 
 const json=(body: unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{'Content-Type':'application/json'}});
 async function equalSecret(a:string,b:string){
@@ -24,22 +25,35 @@ Deno.serve(async(request:Request)=>{
   const supplied=request.headers.get('X-Life-RPG-Secret')??'';
   if(!supplied||!await equalSecret(supplied,secret))return json({error:'Unauthorized.'},401);
   let messageId='';
-  async function rpc(batch:unknown,failure:string|null=null){
-    const response=await fetch(`${Deno.env.get('SUPABASE_URL')}/rest/v1/rpc/life_rpg_ingest`,{
-      method:'POST',headers:{'Content-Type':'application/json','apikey':Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,'Authorization':`Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`},
-      body:JSON.stringify({owner_id:owner,mailbox,message_id:messageId,batch,failure}),
+  async function call(name:string,params:unknown){
+    const key=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const response=await fetch(`${Deno.env.get('SUPABASE_URL')}/rest/v1/rpc/${name}`,{
+      method:'POST',headers:{'Content-Type':'application/json','apikey':key,'Authorization':`Bearer ${key}`},
+      body:JSON.stringify(params),
     });
-    const result=await response.json();
+    const result=await response.json().catch(()=>({}));
     if(!response.ok)throw new ContractError(result.message??'Could not import this batch.');
     return result;
   }
+  const rpc=(batch:unknown,failure:string|null=null)=>call('life_rpg_ingest',{owner_id:owner,mailbox,message_id:messageId,batch,failure});
   try{
     let envelope;
     try{envelope=JSON.parse(await readLimited(request));}catch(e){if(e instanceof ContractError)throw e;throw new ContractError('Invalid JSON request.');}
-    if(!envelope||Array.isArray(envelope)||Object.keys(envelope).sort().join(',')!=='batch,mailbox,message_id'||envelope.mailbox!==mailbox||typeof envelope.message_id!=='string'||!/^[a-zA-Z0-9_-]{1,200}$/.test(envelope.message_id))throw new ContractError('Invalid message identity or envelope.');
+    const shape=envelope&&!Array.isArray(envelope)?Object.keys(envelope).sort().join(','):'';
+    if(!['batch,mailbox,message_id','email,mailbox,message_id'].includes(shape)||envelope.mailbox!==mailbox||typeof envelope.message_id!=='string'||!/^[a-zA-Z0-9_-]{1,200}$/.test(envelope.message_id))throw new ContractError('Invalid message identity or envelope.');
     messageId=envelope.message_id;
-    const batch=validateBatch(envelope.batch);
-    return json({ok:true,...await rpc(batch)});
+    if(envelope.batch!==undefined)return json({ok:true,...await rpc(validateBatch(envelope.batch))});
+    // A plain-English email: GPT turns its actionable items into quests for the owner.
+    const email=envelope.email;
+    if(!email||typeof email.subject!=='string'||typeof email.body!=='string')throw new ContractError('An email needs a subject and body.');
+    const snapshot=await call('life_rpg_owner_snapshot',{owner_id:owner});
+    const plan=await planQuests({snapshot,email,apiKey:Deno.env.get('OPENAI_API_KEY'),model:Deno.env.get('OPENAI_MODEL')||undefined});
+    if(!plan.batch){
+      // Nothing to import is a final answer, not a retryable failure.
+      await rpc(null,plan.reason);
+      return json({ok:true,count:0,note:plan.reason});
+    }
+    return json({ok:true,count:plan.batch.quests.length,...await rpc(plan.batch)});
   }catch(error){
     const reason=error instanceof ContractError?error.message:'Email import is temporarily unavailable. Try again later.';
     if(messageId){try{await rpc(null,reason);}catch{/* The message remains available for retry in Gmail. */}}

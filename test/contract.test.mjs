@@ -15,5 +15,6 @@ test('email extraction accepts explicit payloads, not notification links',()=>{
   assert.throws(()=>extractBatch('Your task is ready. Open ChatGPT to view it.'),/complete quest JSON/);
   const scope={};vm.createContext(scope);vm.runInContext(readFileSync(new URL('../integrations/gmail/Code.gs',import.meta.url),'utf8'),scope);
   assert.equal(scope.extractLifeRpgBatch(JSON.stringify(good)).quests[0].item_key,'walk');
-  assert.throws(()=>scope.extractLifeRpgBatch('Open ChatGPT'),/No complete quest JSON/);
+  // Prose emails are forwarded for GPT conversion instead of failing.
+  assert.equal(scope.extractLifeRpgBatch('Open ChatGPT'),null);
 });

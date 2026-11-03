@@ -51,4 +51,20 @@ void main() {
     expect(find.text('Five paths of growth'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('quest dialog offers ChatGPT prompt in preview', (tester) async {
+    tester.view.physicalSize = const Size(1440, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(const LifeRpgApp());
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Get quests with AI'));
+    await tester.pumpAndSettle();
+    expect(find.text('Get your next quests'), findsOneWidget);
+    expect(find.text('Copy prompt for ChatGPT'), findsOneWidget);
+    // The paid AI planner needs an account, so the preview hides it.
+    expect(find.text('Generate quests'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 }

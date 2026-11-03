@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -137,8 +138,8 @@ class _SignInPageState extends State<SignInPage> {
   final email = TextEditingController();
   final password = TextEditingController();
   final form = GlobalKey<FormState>();
-  bool busy = false, signup = false;
-  String? error;
+  bool busy = false, signup = false, hidden = true;
+  String? error, notice;
   @override
   void dispose() {
     email.dispose();
@@ -151,23 +152,54 @@ class _SignInPageState extends State<SignInPage> {
     setState(() {
       busy = true;
       error = null;
+      notice = null;
     });
     try {
       if (signup) {
         final response = await widget.client.auth.signUp(
           email: email.text.trim(),
           password: password.text,
+          emailRedirectTo: kIsWeb ? Uri.base.origin : null,
         );
         if (mounted && response.session == null) {
           setState(
-            () => error =
-                'Check your email to confirm your account, then sign in.',
+            () => notice = 'Almost there! Check your inbox to confirm your account, then sign in.',
           );
         }
       } else {
         await widget.client.auth.signInWithPassword(
           email: email.text.trim(),
           password: password.text,
+        );
+      }
+    } catch (e) {
+      if (mounted) setState(() => error = friendlyError(e));
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  Future<void> resetPassword() async {
+    final address = email.text.trim();
+    if (!address.contains('@')) {
+      setState(
+        () => error = 'Enter your email first, then tap “Forgot password?”.',
+      );
+      return;
+    }
+    setState(() {
+      busy = true;
+      error = null;
+      notice = null;
+    });
+    try {
+      await widget.client.auth.resetPasswordForEmail(
+        address,
+        redirectTo: kIsWeb ? Uri.base.origin : null,
+      );
+      if (mounted) {
+        setState(
+          () => notice = 'If that account exists, a reset link is on its way.',
         );
       }
     } catch (e) {
@@ -213,16 +245,35 @@ class _SignInPageState extends State<SignInPage> {
                 const SizedBox(height: 14),
                 TextFormField(
                   controller: password,
-                  obscureText: true,
+                  obscureText: hidden,
                   autofillHints: [
                     signup ? AutofillHints.newPassword : AutofillHints.password,
                   ],
-                  decoration: const InputDecoration(labelText: 'Password'),
+                  decoration: InputDecoration(
+                    labelText: 'Password',
+                    suffixIcon: IconButton(
+                      tooltip: hidden ? 'Show password' : 'Hide password',
+                      onPressed: () => setState(() => hidden = !hidden),
+                      icon: Icon(
+                        hidden
+                            ? Icons.visibility_outlined
+                            : Icons.visibility_off_outlined,
+                      ),
+                    ),
+                  ),
                   validator: (v) => v != null && v.length >= 8
                       ? null
                       : 'Use at least 8 characters',
                   onFieldSubmitted: (_) => busy ? null : submit(),
                 ),
+                if (!signup)
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: busy ? null : resetPassword,
+                      child: const Text('Forgot password?'),
+                    ),
+                  ),
                 if (error != null)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 14),
@@ -230,6 +281,11 @@ class _SignInPageState extends State<SignInPage> {
                       error!,
                       style: const TextStyle(color: Color(0xFF986437)),
                     ),
+                  ),
+                if (notice != null)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    child: Text(notice!, style: const TextStyle(color: green)),
                   ),
                 const SizedBox(height: 20),
                 FilledButton(
@@ -476,10 +532,10 @@ class _GameShellState extends ConsumerState<GameShell>
                           const BadgePill('PREVIEW', color: Color(0xFF887245)),
                         const SizedBox(width: 14),
                         IconButton(
-                          tooltip: 'Import quests',
+                          tooltip: 'Get quests with AI',
                           onPressed: () => showImport(),
                           icon: const Icon(
-                            Icons.file_download_outlined,
+                            Icons.auto_awesome_outlined,
                             size: 22,
                           ),
                         ),
@@ -798,7 +854,7 @@ class _GameShellState extends ConsumerState<GameShell>
                   ),
                   const SizedBox(height: 6),
                   const Text(
-                    'Create a quest or import a batch from ChatGPT.',
+                    'Create a quest, or tap ✨ to have AI plan your week.',
                     style: TextStyle(color: muted, fontSize: 12),
                   ),
                 ],
@@ -1317,12 +1373,23 @@ class _GameShellState extends ConsumerState<GameShell>
   Future<void> showImport() async {
     await showDialog<void>(
       context: context,
-      builder: (_) => ImportDialog(
-        receipts: ref.read(gameProvider).value?.imports ?? [],
-        onSave: (batch) => ref.read(gameProvider.notifier).act('import_batch', {
-          'batch': batch,
-        }),
-      ),
+      builder: (_) {
+        final game = ref.read(gameProvider).value;
+        final preview = ref.read(repositoryProvider).isPreview;
+        return ImportDialog(
+          receipts: game?.imports ?? [],
+          prompt: game == null ? null : chatGptPrompt(game),
+          onGenerate: preview
+              ? null
+              : (week, focus) => ref
+                    .read(gameProvider.notifier)
+                    .generate(week: week, focus: focus),
+          onSave: (batch) => ref.read(gameProvider.notifier).act(
+            'import_batch',
+            {'batch': batch},
+          ),
+        );
+      },
     );
   }
 
@@ -1943,9 +2010,13 @@ class ImportDialog extends StatefulWidget {
   const ImportDialog({
     super.key,
     required this.onSave,
+    this.onGenerate,
+    this.prompt,
     this.receipts = const [],
   });
   final Future<void> Function(Map<String, dynamic>) onSave;
+  final Future<AiPlan> Function(String week, String focus)? onGenerate;
+  final String? prompt;
   final List<Map<String, dynamic>> receipts;
   @override
   State<ImportDialog> createState() => _ImportDialogState();
@@ -1953,18 +2024,48 @@ class ImportDialog extends StatefulWidget {
 
 class _ImportDialogState extends State<ImportDialog> {
   final input = TextEditingController();
-  bool busy = false;
-  String? error;
+  final focus = TextEditingController();
+  bool busy = false, generating = false, copied = false;
+  String week = 'auto';
+  String? error, aiError;
+  AiPlan? plan;
   Map<String, dynamic>? batch;
   @override
   void dispose() {
     input.dispose();
+    focus.dispose();
     super.dispose();
   }
 
+  Future<void> generate() async {
+    setState(() {
+      generating = true;
+      aiError = null;
+      plan = null;
+    });
+    try {
+      final result = await widget.onGenerate!(week, focus.text.trim());
+      if (mounted) setState(() => plan = result);
+    } catch (e) {
+      if (mounted) setState(() => aiError = friendlyError(e));
+    } finally {
+      if (mounted) setState(() => generating = false);
+    }
+  }
+
+  Widget section(String title, String subtitle) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+      const SizedBox(height: 4),
+      Text(subtitle, style: const TextStyle(color: muted, fontSize: 13)),
+      const SizedBox(height: 12),
+    ],
+  );
+
   @override
   Widget build(BuildContext context) => AlertDialog(
-    title: const Text('Bring your next quests'),
+    title: const Text('Get your next quests'),
     content: SizedBox(
       width: 560,
       child: SingleChildScrollView(
@@ -1972,11 +2073,94 @@ class _ImportDialogState extends State<ImportDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text(
-              'Paste the quest JSON from your ChatGPT weekly or monthly run. You’ll review the titles before importing.',
-              style: TextStyle(color: muted, fontSize: 13),
+            if (widget.onGenerate != null) ...[
+              section(
+                'Plan with AI',
+                'GPT reads your weekly review, habits and pending quests, then adds a balanced set of quests within your weekly budget.',
+              ),
+              SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(value: 'auto', label: Text('Auto')),
+                  ButtonSegment(value: 'current', label: Text('This week')),
+                  ButtonSegment(value: 'next', label: Text('Next week')),
+                ],
+                selected: {week},
+                onSelectionChanged: generating
+                    ? null
+                    : (v) => setState(() => week = v.first),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: focus,
+                maxLength: 500,
+                enabled: !generating,
+                decoration: const InputDecoration(
+                  labelText: 'Anything to focus on? (optional)',
+                  hintText: 'e.g. exams on Friday, start running again',
+                ),
+              ),
+              FilledButton.icon(
+                onPressed: generating || busy ? null : generate,
+                icon: generating
+                    ? const SizedBox.square(
+                        dimension: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.auto_awesome_rounded, size: 18),
+                label: Text(
+                  generating ? 'Planning your week…' : 'Generate quests',
+                ),
+              ),
+              if (plan != null) ...[
+                const SizedBox(height: 12),
+                Text(
+                  'Added ${plan!.count} quests for the week of ${plan!.periodStart}',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: green,
+                  ),
+                ),
+                for (final t in plan!.titles)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text('• $t'),
+                  ),
+              ],
+              if (aiError != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Text(
+                    aiError!,
+                    style: const TextStyle(color: Colors.deepOrange),
+                  ),
+                ),
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 20),
+                child: Divider(),
+              ),
+            ],
+            section(
+              'Or use your ChatGPT subscription',
+              'Free: copy the prompt, paste it into ChatGPT, then paste its JSON answer below. You’ll review the titles before importing.',
             ),
-            const SizedBox(height: 18),
+            if (widget.prompt != null) ...[
+              OutlinedButton.icon(
+                onPressed: () async {
+                  await Clipboard.setData(ClipboardData(text: widget.prompt!));
+                  if (mounted) setState(() => copied = true);
+                },
+                icon: Icon(
+                  copied ? Icons.check_rounded : Icons.copy_rounded,
+                  size: 18,
+                ),
+                label: Text(
+                  copied
+                      ? 'Prompt copied, now ask ChatGPT'
+                      : 'Copy prompt for ChatGPT',
+                ),
+              ),
+              const SizedBox(height: 14),
+            ],
             if (widget.receipts.isNotEmpty) ...[
               const Text(
                 'Recent email imports',
@@ -2001,7 +2185,7 @@ class _ImportDialogState extends State<ImportDialog> {
             ],
             TextField(
               controller: input,
-              maxLines: 10,
+              maxLines: 8,
               maxLength: 64000,
               decoration: const InputDecoration(
                 hintText: '{ "schema_version": 1, … }',
@@ -2038,11 +2222,11 @@ class _ImportDialogState extends State<ImportDialog> {
     ),
     actions: [
       TextButton(
-        onPressed: busy ? null : () => Navigator.pop(context),
-        child: const Text('Cancel'),
+        onPressed: busy || generating ? null : () => Navigator.pop(context),
+        child: Text(plan != null ? 'Done' : 'Cancel'),
       ),
       FilledButton(
-        onPressed: busy
+        onPressed: busy || generating || input.text.trim().isEmpty
             ? null
             : () async {
                 if (batch == null) {
@@ -2073,7 +2257,7 @@ class _ImportDialogState extends State<ImportDialog> {
           busy
               ? 'Importing…'
               : batch == null
-              ? 'Review batch'
+              ? 'Review pasted JSON'
               : 'Import quests',
         ),
       ),
